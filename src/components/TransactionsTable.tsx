@@ -34,6 +34,9 @@ export default function TransactionsTable({
   const [typeFilter, setTypeFilter] = useState<'all' | 'outflow' | 'transfer'>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [bankFilter, setBankFilter] = useState<string>('all');
+  const [dateFilter, setDateFilter] = useState<'all' | 'weekly' | 'monthly' | 'custom'>('all');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
   const [logToDelete, setLogToDelete] = useState<LogEntry | null>(null);
 
   // Sync internal bankFilter state with external selectedFilterBankId when specified
@@ -63,7 +66,34 @@ export default function TransactionsTable({
       log.bankId === activeBankId || 
       log.relatedBankId === activeBankId;
 
-    return textMatch && typeMatch && categoryMatch && bankMatch;
+    // 5. Date Filter
+    let dateMatch = true;
+    const logDate = new Date(log.date);
+
+    if (dateFilter === 'weekly') {
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      sevenDaysAgo.setHours(0, 0, 0, 0);
+      dateMatch = logDate >= sevenDaysAgo;
+    } else if (dateFilter === 'monthly') {
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      startOfMonth.setHours(0, 0, 0, 0);
+      dateMatch = logDate >= startOfMonth;
+    } else if (dateFilter === 'custom') {
+      if (startDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        dateMatch = dateMatch && logDate >= start;
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        dateMatch = dateMatch && logDate <= end;
+      }
+    }
+
+    return textMatch && typeMatch && categoryMatch && bankMatch && dateMatch;
   });
 
   const uniqueCategories = Array.from(
@@ -75,6 +105,9 @@ export default function TransactionsTable({
     setTypeFilter('all');
     setCategoryFilter('all');
     setBankFilter('all');
+    setDateFilter('all');
+    setStartDate('');
+    setEndDate('');
     if (onClearBankFilter) {
       onClearBankFilter();
     }
@@ -93,7 +126,7 @@ export default function TransactionsTable({
           </p>
         </div>
 
-        {(searchTerm || typeFilter !== 'all' || categoryFilter !== 'all' || activeBankId !== 'all') && (
+        {(searchTerm || typeFilter !== 'all' || categoryFilter !== 'all' || activeBankId !== 'all' || dateFilter !== 'all' || startDate || endDate) && (
           <button
             onClick={resetAllFilters}
             className="self-start md:self-center flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-3.5 py-2 rounded-lg transition hover:bg-indigo-100/60 cursor-pointer"
@@ -105,76 +138,124 @@ export default function TransactionsTable({
       </div>
 
       {/* Filters Pane */}
-      <div className="p-6 bg-slate-50/50 dark:bg-slate-900/40 border-b border-slate-200/60 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Search Input */}
-        <div className="relative">
-          <Search className="absolute left-3 top-3 h-4 w-4 text-slate-450 dark:text-slate-500" />
-          <input
-            id="search-transactions"
-            type="text"
-            placeholder="Buscar por concepto o banco..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 text-xs bg-white dark:bg-slate-805 border border-slate-200 dark:border-slate-755 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-400 text-slate-800 dark:text-white"
-          />
+      <div className="p-6 bg-slate-50/50 dark:bg-slate-900/40 border-b border-slate-200/60 dark:border-slate-800 space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+          {/* Search Input */}
+          <div className="relative">
+            <Search className="absolute left-3 top-3 h-4 w-4 text-slate-450 dark:text-slate-500" />
+            <input
+              id="search-transactions"
+              type="text"
+              placeholder="Buscar por concepto o banco..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-4 py-2.5 text-xs bg-white dark:bg-slate-805 border border-slate-200 dark:border-slate-755 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-400 text-slate-800 dark:text-white"
+            />
+          </div>
+
+          {/* Type Filter dropdown */}
+          <div className="relative">
+            <Layers className="absolute left-3 top-3 h-4 w-4 text-slate-450 dark:text-slate-500" />
+            <select
+              id="filter-type"
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value as any)}
+              className="w-full pl-9 pr-4 py-2.5 text-xs bg-white dark:bg-slate-805 border border-slate-200 dark:border-slate-755 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-400 text-slate-800 dark:text-white appearance-none"
+            >
+              <option value="all">Todos los Tipos</option>
+              <option value="outflow">Salidas (Gastos/Ingresos)</option>
+              <option value="transfer">Transferencias entre Cuentas</option>
+            </select>
+          </div>
+
+          {/* Bank Filter dropdown */}
+          <div className="relative">
+            <Filter className="absolute left-3 top-3 h-4 w-4 text-slate-450 dark:text-slate-500" />
+            <select
+              id="filter-bank"
+              value={activeBankId}
+              onChange={(e) => {
+                setBankFilter(e.target.value);
+                if (onClearBankFilter && e.target.value === 'all') {
+                  onClearBankFilter();
+                }
+              }}
+              className="w-full pl-9 pr-4 py-2.5 text-xs bg-white dark:bg-slate-805 border border-slate-200 dark:border-slate-755 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-400 text-slate-800 dark:text-white appearance-none"
+            >
+              <option value="all">Todos los Bancos</option>
+              {banks.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Category Filter dropdown */}
+          <div className="relative">
+            <Tag className="absolute left-3 top-3 h-4 w-4 text-slate-450 dark:text-slate-500" />
+            <select
+              id="filter-category"
+              value={categoryFilter}
+              disabled={typeFilter === 'transfer'}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="w-full pl-9 pr-4 py-2.5 text-xs bg-white dark:bg-slate-805 border border-slate-200 dark:border-slate-755 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-400 text-slate-800 dark:text-white disabled:opacity-50 disabled:bg-slate-100 appearance-none"
+            >
+              <option value="all">Todas las Categorías</option>
+              {uniqueCategories.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Date Range Preset Filter dropdown */}
+          <div className="relative">
+            <Calendar className="absolute left-3 top-3 h-4 w-4 text-slate-450 dark:text-slate-500" />
+            <select
+              id="filter-date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value as any)}
+              className="w-full pl-9 pr-4 py-2.5 text-xs bg-white dark:bg-slate-805 border border-slate-200 dark:border-slate-755 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-400 text-slate-800 dark:text-white appearance-none"
+            >
+              <option value="all">📅 Cualquier Fecha</option>
+              <option value="weekly">⚡ Semanal (Últimos 7 días)</option>
+              <option value="monthly">📆 Mensual (Este Mes)</option>
+              <option value="custom">🛠️ Rango Personalizado...</option>
+            </select>
+          </div>
         </div>
 
-        {/* Type Filter dropdown */}
-        <div className="relative">
-          <Layers className="absolute left-3 top-3 h-4 w-4 text-slate-450 dark:text-slate-500" />
-          <select
-            id="filter-type"
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value as any)}
-            className="w-full pl-9 pr-4 py-2.5 text-xs bg-white dark:bg-slate-805 border border-slate-200 dark:border-slate-755 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-400 text-slate-800 dark:text-white appearance-none"
-          >
-            <option value="all">Todos los Tipos</option>
-            <option value="outflow">Salidas (Gastos/Ingresos)</option>
-            <option value="transfer">Transferencias entre Cuentas</option>
-          </select>
-        </div>
-
-        {/* Bank Filter dropdown */}
-        <div className="relative">
-          <Filter className="absolute left-3 top-3 h-4 w-4 text-slate-450 dark:text-slate-500" />
-          <select
-            id="filter-bank"
-            value={activeBankId}
-            onChange={(e) => {
-              setBankFilter(e.target.value);
-              if (onClearBankFilter && e.target.value === 'all') {
-                onClearBankFilter();
-              }
-            }}
-            className="w-full pl-9 pr-4 py-2.5 text-xs bg-white dark:bg-slate-805 border border-slate-200 dark:border-slate-755 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-400 text-slate-800 dark:text-white appearance-none"
-          >
-            <option value="all">Todos los Bancos</option>
-            {banks.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Category Filter dropdown */}
-        <div className="relative">
-          <Tag className="absolute left-3 top-3 h-4 w-4 text-slate-450 dark:text-slate-500" />
-          <select
-            id="filter-category"
-            value={categoryFilter}
-            disabled={typeFilter === 'transfer'}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 text-xs bg-white dark:bg-slate-805 border border-slate-200 dark:border-slate-755 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-400 text-slate-800 dark:text-white disabled:opacity-50 disabled:bg-slate-100 appearance-none"
-          >
-            <option value="all">Todas las Categorías</option>
-            {uniqueCategories.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Custom Date Picker inputs shown conditionally */}
+        {dateFilter === 'custom' && (
+          <div id="custom-date-inputs" className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-white dark:bg-slate-805 rounded-xl border border-slate-200 dark:border-slate-755 animate-[fadeIn_0.2s_ease-out]">
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">
+                📅 Fecha Desde (Inicio)
+              </label>
+              <input
+                id="filter-start-date"
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-400 text-slate-800 dark:text-white"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">
+                📅 Fecha Hasta (Fin)
+              </label>
+              <input
+                id="filter-end-date"
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-400 text-slate-800 dark:text-white"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Logs Table Area */}
