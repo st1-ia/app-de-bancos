@@ -1,0 +1,6 @@
+{
+  "name": "Gestor de Bancos",
+  "description": "Una aplicación web para gestionar múltiples cuentas bancarias, registrar gastos (salidas) detallados y realizar transferencias fáciles entre cuentas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
