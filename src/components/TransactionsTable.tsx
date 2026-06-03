@@ -34,10 +34,13 @@ export default function TransactionsTable({
   const [typeFilter, setTypeFilter] = useState<'all' | 'outflow' | 'transfer'>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [bankFilter, setBankFilter] = useState<string>('all');
-  const [dateFilter, setDateFilter] = useState<'all' | 'weekly' | 'monthly' | 'custom'>('all');
-  const [startDate, setStartDate] = useState<string>('');
-  const [endDate, setEndDate] = useState<string>('');
   const [logToDelete, setLogToDelete] = useState<LogEntry | null>(null);
+
+  // Date range filters
+  const [filterByDate, setFilterByDate] = useState(false);
+  const [dateRangeType, setDateRangeType] = useState<'weekly' | 'monthly' | 'custom'>('weekly');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   // Sync internal bankFilter state with external selectedFilterBankId when specified
   const activeBankId = selectedFilterBankId || bankFilter;
@@ -66,30 +69,33 @@ export default function TransactionsTable({
       log.bankId === activeBankId || 
       log.relatedBankId === activeBankId;
 
-    // 5. Date Filter
+    // 5. Date Filter (Weekly, Monthly or Custom range)
     let dateMatch = true;
-    const logDate = new Date(log.date);
-
-    if (dateFilter === 'weekly') {
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      sevenDaysAgo.setHours(0, 0, 0, 0);
-      dateMatch = logDate >= sevenDaysAgo;
-    } else if (dateFilter === 'monthly') {
-      const now = new Date();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      startOfMonth.setHours(0, 0, 0, 0);
-      dateMatch = logDate >= startOfMonth;
-    } else if (dateFilter === 'custom') {
-      if (startDate) {
-        const start = new Date(startDate);
-        start.setHours(0, 0, 0, 0);
-        dateMatch = dateMatch && logDate >= start;
-      }
-      if (endDate) {
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        dateMatch = dateMatch && logDate <= end;
+    if (filterByDate && log.date) {
+      const logTime = new Date(log.date).getTime();
+      if (!isNaN(logTime)) {
+        if (dateRangeType === 'weekly') {
+          // 7 days ago
+          const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+          dateMatch = logTime >= cutoff;
+        } else if (dateRangeType === 'monthly') {
+          // 30 days ago
+          const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+          dateMatch = logTime >= cutoff;
+        } else if (dateRangeType === 'custom') {
+          if (startDate) {
+            const startMs = new Date(startDate + 'T00:00:00').getTime();
+            if (!isNaN(startMs)) {
+              dateMatch = dateMatch && logTime >= startMs;
+            }
+          }
+          if (endDate) {
+            const endMs = new Date(endDate + 'T23:59:59').getTime();
+            if (!isNaN(endMs)) {
+              dateMatch = dateMatch && logTime <= endMs;
+            }
+          }
+        }
       }
     }
 
@@ -105,7 +111,8 @@ export default function TransactionsTable({
     setTypeFilter('all');
     setCategoryFilter('all');
     setBankFilter('all');
-    setDateFilter('all');
+    setFilterByDate(false);
+    setDateRangeType('weekly');
     setStartDate('');
     setEndDate('');
     if (onClearBankFilter) {
@@ -126,7 +133,7 @@ export default function TransactionsTable({
           </p>
         </div>
 
-        {(searchTerm || typeFilter !== 'all' || categoryFilter !== 'all' || activeBankId !== 'all' || dateFilter !== 'all' || startDate || endDate) && (
+        {(searchTerm || typeFilter !== 'all' || categoryFilter !== 'all' || activeBankId !== 'all' || filterByDate || startDate || endDate) && (
           <button
             onClick={resetAllFilters}
             className="self-start md:self-center flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-3.5 py-2 rounded-lg transition hover:bg-indigo-100/60 cursor-pointer"
@@ -138,8 +145,8 @@ export default function TransactionsTable({
       </div>
 
       {/* Filters Pane */}
-      <div className="p-6 bg-slate-50/50 dark:bg-slate-900/40 border-b border-slate-200/60 dark:border-slate-800 space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+      <div className="p-6 bg-slate-50/50 dark:bg-slate-900/40 border-b border-slate-200/60 dark:border-slate-800 flex flex-col gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Search Input */}
           <div className="relative">
             <Search className="absolute left-3 top-3 h-4 w-4 text-slate-450 dark:text-slate-500" />
@@ -209,53 +216,79 @@ export default function TransactionsTable({
               ))}
             </select>
           </div>
+        </div>
+        {/* Date Filter section */}
+        <div className="border-t border-slate-200/50 dark:border-slate-800 pt-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setFilterByDate(!filterByDate)}
+                className={`flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all cursor-pointer ${
+                  filterByDate
+                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                    : 'bg-white dark:bg-slate-850 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-650 dark:text-slate-350 border-slate-200 @dark:border-slate-755'
+                }`}
+              >
+                <Calendar className="h-3.5 w-3.5" />
+                Filtrar por fecha
+              </button>
 
-          {/* Date Range Preset Filter dropdown */}
-          <div className="relative">
-            <Calendar className="absolute left-3 top-3 h-4 w-4 text-slate-450 dark:text-slate-500" />
-            <select
-              id="filter-date"
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value as any)}
-              className="w-full pl-9 pr-4 py-2.5 text-xs bg-white dark:bg-slate-805 border border-slate-200 dark:border-slate-755 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-400 text-slate-800 dark:text-white appearance-none"
-            >
-              <option value="all">📅 Cualquier Fecha</option>
-              <option value="weekly">⚡ Semanal (Últimos 7 días)</option>
-              <option value="monthly">📆 Mensual (Este Mes)</option>
-              <option value="custom">🛠️ Rango Personalizado...</option>
-            </select>
+              {filterByDate && (
+                <div className="flex flex-wrap gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+                  {[
+                    { value: 'weekly', label: 'Semanal' },
+                    { value: 'monthly', label: 'Mensual' },
+                    { value: 'custom', label: 'Elegir rango' }
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => {
+                        setDateRangeType(option.value as any);
+                        if (option.value !== 'custom') {
+                          setStartDate('');
+                          setEndDate('');
+                        }
+                      }}
+                      className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                        dateRangeType === option.value
+                          ? 'bg-indigo-600 text-white shadow-sm'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Custom Inputs */}
+            {filterByDate && dateRangeType === 'custom' && (
+              <div className="flex flex-wrap items-center gap-2.5 bg-slate-100 dark:bg-slate-800/50 p-2 rounded-xl border border-slate-200/50 dark:border-slate-800">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Desde:</span>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="px-2 py-1 text-xs bg-white dark:bg-slate-805 border border-slate-200 dark:border-slate-755 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-455 text-slate-800 dark:text-white"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Hasta:</span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="px-2 py-1 text-xs bg-white dark:bg-slate-805 border border-slate-200 dark:border-slate-755 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-455 text-slate-800 dark:text-white"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
-
-        {/* Custom Date Picker inputs shown conditionally */}
-        {dateFilter === 'custom' && (
-          <div id="custom-date-inputs" className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-white dark:bg-slate-805 rounded-xl border border-slate-200 dark:border-slate-755 animate-[fadeIn_0.2s_ease-out]">
-            <div>
-              <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">
-                📅 Fecha Desde (Inicio)
-              </label>
-              <input
-                id="filter-start-date"
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-400 text-slate-800 dark:text-white"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">
-                📅 Fecha Hasta (Fin)
-              </label>
-              <input
-                id="filter-end-date"
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-400 text-slate-800 dark:text-white"
-              />
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Logs Table Area */}
